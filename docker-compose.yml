@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: vocab_app
+    ports:
+      - '5433:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: always
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - '6380:6379'
+    volumes:
+      - redis_data:/data
+    restart: always
+
+  api:
+    build:
+      context: ./apps/api
+    environment:
+      - DATABASE_URL=postgresql://user:password@postgres:5432/vocab_app
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
+      - AI_API_KEY=${AI_API_KEY}
+      - AI_MODEL=${AI_MODEL}
+    ports:
+      - '3000:3000'
+    depends_on:
+      - postgres
+      - redis
+    restart: always
+
+  web:
+    build:
+      context: ./apps/web
+    ports:
+      - '5173:80'
+    depends_on:
+      - api
+    restart: always
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - '80:80'
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - api
+      - web
+    restart: always
+
+volumes:
+  postgres_data:
+  redis_data:

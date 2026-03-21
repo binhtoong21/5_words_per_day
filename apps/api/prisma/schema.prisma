@@ -1,0 +1,142 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id           String        @id @default(uuid())
+  email        String        @unique
+  passwordHash String
+  currentBand  String        @default("A1")
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  userWords    UserWord[]
+  quizzes      Quiz[]
+  passages     ReadingPassage[]
+}
+
+model Word {
+  id          String       @id @default(uuid())
+  word        String       @unique
+  band        String
+  phonetic    String?
+  definitions Json         // Array of { partOfSpeech, meaning, example }
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  userWords   UserWord[]
+}
+
+enum LearningStatus {
+  NEW
+  LEARNING
+  REVIEWING
+  MASTERED
+}
+
+model UserWord {
+  id           String         @id @default(uuid())
+  user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId       String
+  word         Word           @relation(fields: [wordId], references: [id], onDelete: Cascade)
+  wordId       String
+  
+  status       LearningStatus @default(NEW)
+  streak       Int            @default(0)
+  correctCount Int            @default(0)
+  wrongCount   Int            @default(0)
+  lastReviewed DateTime?      @default(now())
+  
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  notes        WordNote[]
+  quizItems    QuizItem[]
+
+  @@unique([userId, wordId])
+}
+
+model WordNote {
+  id         String   @id @default(uuid())
+  userWord   UserWord @relation(fields: [userWordId], references: [id], onDelete: Cascade)
+  userWordId String
+  title      String
+  content    String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+enum QuizType {
+  DAILY
+  QUICK
+  BAND_TEST
+  CUSTOM
+}
+
+enum QuizStatus {
+  IN_PROGRESS
+  COMPLETED
+}
+
+model Quiz {
+  id          String      @id @default(uuid())
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String
+  type        QuizType
+  status      QuizStatus  @default(IN_PROGRESS)
+  score       Float?
+  completedAt DateTime?
+  createdAt   DateTime    @default(now())
+  
+  items       QuizItem[]
+}
+
+model QuizItem {
+  id            String   @id @default(uuid())
+  quiz          Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  quizId        String
+  userWord      UserWord? @relation(fields: [userWordId], references: [id], onDelete: Cascade)
+  userWordId    String?
+  
+  wordId        String?  // Needed when testing system words
+  
+  questionType  String
+  questionText  String
+  options       Json?
+  correctAnswer String
+  userAnswer    String?
+  isCorrect     Boolean?
+}
+
+model ReadingPassage {
+  id        String   @id @default(uuid())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  title     String
+  content   String
+  status    String   @default("UNREAD")
+  createdAt DateTime @default(now())
+  
+  passageWords ReadingPassageWord[]
+  highlights   PassageHighlight[]
+}
+
+model ReadingPassageWord {
+  id         String         @id @default(uuid())
+  passage    ReadingPassage @relation(fields: [passageId], references: [id], onDelete: Cascade)
+  passageId  String
+  wordId     String
+}
+
+model PassageHighlight {
+  id         String         @id @default(uuid())
+  passage    ReadingPassage @relation(fields: [passageId], references: [id], onDelete: Cascade)
+  passageId  String
+  wordText   String
+  createdAt  DateTime       @default(now())
+}
