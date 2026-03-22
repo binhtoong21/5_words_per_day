@@ -14,41 +14,7 @@ export class QuizService {
     let wordsToTest: any[] = [];
 
     if (dto.type === 'DAILY') {
-      const user = await this.prisma.user.findUnique({ where: { id: userId } });
-      
-      const learningWords = await this.prisma.userWord.findMany({
-        where: { userId, status: { in: ['LEARNING', 'REVIEWING'] } },
-        include: { word: true },
-        take: 20
-      });
-
-      const sevenDaysAgo = new Date();
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-      const masteredWords = await this.prisma.userWord.findMany({
-        where: { userId, status: 'MASTERED', lastReviewed: { lt: sevenDaysAgo } },
-        include: { word: true },
-        take: 10
-      });
-      
-      const userWordIds = (await this.prisma.userWord.findMany({ where: { userId }, select: { wordId: true } })).map(uw => uw.wordId);
-      const newSystemWords = await this.prisma.word.findMany({
-        where: { band: user?.currentBand || 'A1', id: { notIn: userWordIds } },
-        take: 20
-      });
-
-      const shuffle = (arr: any[]) => arr.sort(() => 0.5 - Math.random());
-      
-      let remaining = 10;
-      
-      const p1 = shuffle(learningWords).slice(0, 7).map((uw: any) => ({ ...uw.word, userWordId: uw.id }));
-      remaining -= p1.length;
-      
-      const p2 = shuffle(masteredWords).slice(0, Math.min(2, remaining)).map((uw: any) => ({ ...uw.word, userWordId: uw.id }));
-      remaining -= p2.length;
-      
-      const p3 = shuffle(newSystemWords).slice(0, remaining).map((w: any) => ({ ...w, userWordId: null }));
-      
-      wordsToTest = [...p1, ...p2, ...p3];
+      wordsToTest = await this.selectDailyWords(userId);
     } else if (dto.type === 'QUICK') {
       const userWords = await this.prisma.userWord.findMany({ where: { userId }, include: { word: true } });
       wordsToTest = userWords.sort(() => 0.5 - Math.random()).slice(0, 10).map((uw: any) => ({ ...uw.word, userWordId: uw.id }));
@@ -170,6 +136,74 @@ export class QuizService {
       where: { id: quizId },
       data: { status: 'COMPLETED', completedAt: new Date(), score }
     });
+  }
+
+  /**
+   * Thuật toán trộn từ cho Daily Quiz theo spec:
+   *  - 70% từ LEARNING / REVIEWING (ưu tiên từ lâu chưa ôn)
+   *  - 20% từ MASTERED đã > 7 ngày chưa ôn
+   *  - 10% từ mới từ hệ thống matching currentBand (chưa nằm trong kho user)
+   *  - Nếu bất kỳ pool nào thiếu, bù bằng từ hệ thống bất kỳ (filler)
+   */
+  private async selectDailyWords(userId: string, total = 15): Promise<any[]> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    const currentBand = user?.currentBand || 'A1';
+
+    // Tính quota theo tỷ lệ spec
+    const learningQuota = Math.round(total * 0.7);
+    const masteredQuota = Math.round(total * 0.2);
+    const newQuota      = total - learningQuota - masteredQuota;
+
+    // Pool 1: Từ đang học (LEARNING / REVIEWING), ưu tiên lâu chưa ôn
+    const learningWords = await this.prisma.userWord.findMany({
+      where: { userId, status: { in: ['LEARNING', 'REVIEWING'] } },
+      include: { word: true },
+      orderBy: { lastReviewed: 'asc' },
+      take: learningQuota,
+    });
+
+    // Pool 2: Từ MASTERED nhưng chưa ôn > 7 ngày
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const masteredWords = await this.prisma.userWord.findMany({
+      where: { userId, status: 'MASTERED', lastReviewed: { lt: sevenDaysAgo } },
+      include: { word: true },
+      orderBy: { lastReviewed: 'asc' },
+      take: masteredQuota,
+    });
+
+    // Pool 3: Từ mới từ hệ thống, loại trừ từ đã có trong kho user
+    const existingWordIds = (
+      await this.prisma.userWord.findMany({
+        where: { userId },
+        select: { wordId: true },
+      })
+    ).map((uw: { wordId: string }) => uw.wordId);
+
+    const newSystemWords = await this.prisma.word.findMany({
+      where: { band: currentBand, id: { notIn: existingWordIds } },
+      take: newQuota,
+    });
+
+    // Gom kết quả từ 3 pools
+    const result: any[] = [
+      ...learningWords.map((uw: any) => ({ ...uw.word, userWordId: uw.id })),
+      ...masteredWords.map((uw: any) => ({ ...uw.word, userWordId: uw.id })),
+      ...newSystemWords.map((w: any)  => ({ ...w,       userWordId: null })),
+    ];
+
+    // Redistribution: nếu thiếu so với total, bổ sung filler từ hệ thống bất kỳ band
+    if (result.length < total) {
+      const currentIds = result.map((w: any) => w.id);
+      const filler = await this.prisma.word.findMany({
+        where: { id: { notIn: [...existingWordIds, ...currentIds] } },
+        take: total - result.length,
+      });
+      result.push(...filler.map((w: any) => ({ ...w, userWordId: null })));
+    }
+
+    // Xáo trộn thứ tự cuối cùng
+    return result.sort(() => 0.5 - Math.random());
   }
 
   async updateLearningStatus(userWordId: string, isCorrect: boolean) {
