@@ -45,13 +45,6 @@ A web-based English vocabulary learning app that helps users build a personal wo
 │       │   ├── hooks/
 │       │   └── router.tsx
 │       └── Dockerfile
-├── docs/
-│   └── design.md             # Full design decisions and rationale
-├── .agent/
-│   └── skills/
-│       └── SKILL.md          # AI agent workflows and coding patterns
-├── GEMINI.md                 # AI behavior instructions (auto-loaded by Antigravity)
-├── implementation_plan.md    # Phased implementation plan with file-level detail
 ├── docker-compose.yml
 ├── nginx.conf
 └── .env.example
@@ -145,12 +138,3 @@ npm run dev
 | AI Features | `/ai` | Yes |
 | Quizzes | `/quizzes` | Yes |
 | Reading Passages | `/passages` | Yes |
-
-Full API design is documented in [`implementation_plan.md`](./implementation_plan.md).
-
-## For AI Agents
-
-- **`GEMINI.md`** — coding conventions, business rules, AI usage constraints. Antigravity loads this automatically.
-- **`.agent/skills/SKILL.md`** — reusable workflow patterns for common tasks.
-- **`implementation_plan.md`** — phased plan with exact files to create and logic to implement.
-- **`docs/design.md`** — design rationale and decisions made during planning.
