@@ -8,8 +8,22 @@ export function RegisterPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPlacementPrompt, setShowPlacementPrompt] = useState(false);
   const setUser = useAuthStore((s: any) => s.setUser);
   const navigate = useNavigate();
+
+  const handleTakeQuiz = async () => {
+    try {
+      setLoading(true);
+      const { data } = await api.post('/quizzes', { type: 'BAND_TEST' });
+      navigate(`/quiz/${data.id}`);
+    } catch (e) {
+      alert('Failed to start placement test');
+      navigate('/dashboard');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -17,13 +31,41 @@ export function RegisterPage() {
     try {
       const { data } = await api.post('/auth/register', { email, password });
       setUser({ id: data.id, email: data.email, currentBand: 'A1' });
-      navigate('/dashboard');
+      setShowPlacementPrompt(true);
     } catch (e) {
       alert('Registration failed.');
     } finally {
       setLoading(false);
     }
   };
+
+  if (showPlacementPrompt) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-slate-50 p-4 font-sans">
+        <div className="w-full max-w-md bg-white rounded-3xl p-8 shadow-2xl shadow-slate-200/50 border border-slate-100 text-center">
+          <BookOpen className="w-16 h-16 text-indigo-600 mx-auto mb-6" />
+          <h2 className="text-3xl font-extrabold text-slate-800 tracking-tight mb-4">Welcome!</h2>
+          <p className="text-slate-600 mb-8 font-medium">To personalize your learning experience, would you like to take a quick vocabulary placement test to determine your current English band?</p>
+          <div className="flex flex-col gap-3">
+            <button 
+              onClick={handleTakeQuiz} 
+              disabled={loading}
+              className="w-full py-4 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition shadow-lg shadow-indigo-500/30 disabled:opacity-50"
+            >
+              {loading ? 'Starting...' : 'Take Placement Test'}
+            </button>
+            <button 
+              onClick={() => navigate('/dashboard')}
+              disabled={loading}
+              className="w-full py-4 bg-slate-100 text-slate-700 font-bold rounded-xl hover:bg-slate-200 transition"
+            >
+              Maybe Later
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-slate-50 p-4 font-sans">

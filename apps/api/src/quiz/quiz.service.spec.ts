@@ -163,3 +163,48 @@ describe('QuizService — selectDailyWords', () => {
     expect(result.some((w: any) => w.id === 'already-in-bank')).toBe(false);
   });
 });
+
+describe('QuizService — complete', () => {
+  let service: QuizService;
+  let prisma: Record<string, any>;
+
+  beforeEach(async () => {
+    prisma = {
+      user: { update: jest.fn() },
+      word: { findMany: jest.fn() },
+      quiz: { findFirst: jest.fn(), update: jest.fn() },
+    };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        QuizService,
+        { provide: PrismaService, useValue: prisma },
+        { provide: AiService, useValue: {} },
+      ],
+    }).compile();
+
+    service = module.get<QuizService>(QuizService);
+  });
+
+  it('BAND_TEST calculates correct rate and updates currentBand', async () => {
+    const quizItems = [
+      { wordId: 'w1', isCorrect: true },
+      { wordId: 'w2', isCorrect: true }, // A1 is 2/2 = 100%
+      { wordId: 'w3', isCorrect: false },
+      { wordId: 'w4', isCorrect: false }, // B2 is 0/2 = 0%
+    ];
+    prisma.quiz.findFirst.mockResolvedValue({ id: 'q1', userId: 'u1', type: 'BAND_TEST', items: quizItems });
+    prisma.word.findMany.mockResolvedValue([
+      { id: 'w1', band: 'A1' }, { id: 'w2', band: 'A1' },
+      { id: 'w3', band: 'B2' }, { id: 'w4', band: 'B2' },
+    ]);
+    prisma.quiz.update.mockResolvedValue(true);
+
+    await service.complete('u1', 'q1');
+
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: 'u1' },
+      data: { currentBand: 'A1' }
+    });
+  });
+});
