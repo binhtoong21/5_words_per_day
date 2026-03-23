@@ -42,22 +42,113 @@ export class AiService {
 
   async checkNote(userId: string, dto: CheckNoteDto) {
     await this.enforceRateLimit(userId, 'checkNote', 30);
-    return { ok: true, feedback: 'Looks good!' };
+    
+    const client = this.getOpenAI();
+    if (!client) return { ok: true, feedback: 'Looks good! (Mock)' };
+
+    const note = await this.prisma.wordNote.findFirst({
+      where: { id: dto.noteId, userWordId: dto.userWordId, userWord: { userId } },
+      include: { userWord: { include: { word: true } } }
+    });
+    if (!note) throw new HttpException('Note not found', HttpStatus.NOT_FOUND);
+
+    const prompt = `Evaluate the spelling, grammar, and contextual accuracy of the following custom note for the English word "${note.userWord.word.word}".
+Note Title: "${note.title}"
+Note Content: "${note.content}"
+
+Output ONLY a JSON object exactly like this:
+{ "ok": boolean, "feedback": "string explaining any errors or saying it is perfect" }`;
+
+    try {
+      const response = await client.chat.completions.create({
+        model: process.env.AI_MODEL || 'gpt-4o-mini',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.3
+      });
+      let rawJson = response.choices[0].message.content || '{"ok":true,"feedback":"Error parsing."}';
+      rawJson = rawJson.replace(/```json/g, '').replace(/```/g, '').trim();
+      return JSON.parse(rawJson);
+    } catch (e) {
+      console.error('AI checkNote Error:', e);
+      return { ok: true, feedback: 'Validation service temporarily unavailable.' };
+    }
   }
 
   async suggestNote(userId: string, dto: SuggestNoteDto) {
     await this.enforceRateLimit(userId, 'suggestNote', 30);
-    const cached = await this.cacheManager.get(`suggest-note:${dto.wordId}`);
+    const cacheKey = `suggest-note:${dto.wordId}`;
+    const cached = await this.cacheManager.get(cacheKey);
     if (cached) return cached;
     
-    const result = { suggestions: [{ title: 'Context', content: 'Used in this way.' }] };
-    await this.cacheManager.set(`suggest-note:${dto.wordId}`, result, 604800000);
-    return result;
+    const client = this.getOpenAI();
+    if (!client) {
+      const result = { suggestions: [{ title: 'Context (Mock)', content: 'Used in this way.' }] };
+      await this.cacheManager.set(cacheKey, result, 604800000);
+      return result;
+    }
+
+    const word = await this.prisma.word.findUnique({ where: { id: dto.wordId } });
+    if (!word) throw new HttpException('Word not found', HttpStatus.NOT_FOUND);
+
+    const prompt = `Generate 2 to 3 creative note suggestions for someone learning the English word "${word.word}".
+The word details are: ${JSON.stringify(word.definitions)}
+
+Ensure the suggestions show how to use the word in different contexts or mnemonics.
+Output ONLY a JSON object exactly like this:
+{ "suggestions": [ { "title": "short string", "content": "longer string" } ] }`;
+
+    try {
+      const response = await client.chat.completions.create({
+        model: process.env.AI_MODEL || 'gpt-4o-mini',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.7
+      });
+      let rawJson = response.choices[0].message.content || '{"suggestions":[]}';
+      rawJson = rawJson.replace(/```json/g, '').replace(/```/g, '').trim();
+      const result = JSON.parse(rawJson);
+      if (result && result.suggestions) {
+        await this.cacheManager.set(cacheKey, result, 604800000);
+      }
+      return result;
+    } catch (e) {
+      console.error('AI suggestNote Error:', e);
+      throw new HttpException('AI Generation Failed', HttpStatus.INTERNAL_SERVER_ERROR);
+    }
   }
 
   async ask(userId: string, dto: AskWordDto) {
     await this.enforceRateLimit(userId, 'ask', 20);
-    return { answer: 'AI answer restricted to vocab context.' };
+    
+    const client = this.getOpenAI();
+    if (!client) return { answer: 'AI answer restricted to vocab context. (Mock)' };
+
+    const word = await this.prisma.word.findUnique({ where: { id: dto.wordId } });
+    if (!word) throw new HttpException('Word not found', HttpStatus.NOT_FOUND);
+
+    const prompt = `You are a helpful English tutor. The user is asking a question about the English word "${word.word}".
+The dictionary definition for context is: ${JSON.stringify(word.definitions)}
+
+User's Question: "${dto.question}"
+
+Rules:
+1. Only answer questions related to the word, English grammar, or language learning.
+2. If the user asks something completely unrelated, politely decline and refocus them on language learning.
+3. Be concise and friendly.
+4. Output ONLY a JSON object exactly like this: { "answer": "your answer here" }`;
+
+    try {
+      const response = await client.chat.completions.create({
+        model: process.env.AI_MODEL || 'gpt-4o-mini',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.5
+      });
+      let rawJson = response.choices[0].message.content || '{"answer":"Error generating response."}';
+      rawJson = rawJson.replace(/```json/g, '').replace(/```/g, '').trim();
+      return JSON.parse(rawJson);
+    } catch (e) {
+      console.error('AI ask Error:', e);
+      throw new HttpException('AI Generation Failed', HttpStatus.INTERNAL_SERVER_ERROR);
+    }
   }
 
   async generateQuiz(userId: string, dto: GenerateQuizDto) {
@@ -89,7 +180,8 @@ Rules:
       const response = await client.chat.completions.create({
          model: process.env.AI_MODEL || 'gpt-4o-mini',
          messages: [{ role: 'user', content: prompt }],
-         temperature: 0.7
+         temperature: 0.7,
+         response_format: { type: 'json_object' }
       });
 
       let rawJson = response.choices[0].message.content || '{"questions":[]}';
@@ -112,19 +204,24 @@ Rules:
       });
     }
 
-    const prompt = `You are an expert English teacher. Write an engaging B1/B2 level short story about "${(dto as any).topic || 'a random interesting adventure'}". The story should be 3-4 paragraphs long. Use natural, authentic English. Do not include markdown formatting or titles in the output, just the raw text of the story.`;
+    const prompt = `You are an expert English teacher. Write an engaging B1/B2 level short story about "${(dto as any).topic || 'a random interesting adventure'}". The story should be 3-4 paragraphs long. Use natural, authentic English. 
+Output ONLY a JSON object exactly like this:
+{ "title": "A catchy title for the story", "content": "The 3-4 paragraph story text" }`;
 
     try {
       const response = await client.chat.completions.create({
          model: process.env.AI_MODEL || 'gpt-4o-mini',
          messages: [{ role: 'user', content: prompt }],
-         temperature: 0.7
+         temperature: 0.7,
+         response_format: { type: 'json_object' }
       });
 
-      const text = response.choices[0].message.content || 'Generated story error.';
+      let rawJson = response.choices[0].message.content || '{"title":"Error", "content":"Generation failed."}';
+      rawJson = rawJson.replace(/```json/g, '').replace(/```/g, '').trim();
+      const parsed = JSON.parse(rawJson);
       
       return await this.prisma.readingPassage.create({
-        data: { userId, title: (dto as any).topic ? `Reading: ${(dto as any).topic}` : 'Daily Reading Practice', content: text }
+        data: { userId, title: parsed.title || 'Daily Reading Practice', content: parsed.content || 'Error' }
       });
     } catch (e) {
       console.error('AI Passage Error:', e);
