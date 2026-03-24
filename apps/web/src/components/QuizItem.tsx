@@ -9,7 +9,7 @@ interface QuizItemProps {
   onSubmit: (answer: string) => Promise<{ isCorrect: boolean, correctAnswer: string }>;
 }
 
-export function QuizItem({ id, question, options, onSubmit }: QuizItemProps) {
+export function QuizItem({ question, options, onSubmit }: QuizItemProps) {
   const [selected, setSelected] = useState('');
   const [result, setResult] = useState<{ isCorrect: boolean, correctAnswer: string } | null>(null);
   const [loading, setLoading] = useState(false);

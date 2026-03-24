@@ -81,4 +81,74 @@ export class UserWordsService {
     if (!note) throw new NotFoundException();
     return this.prisma.wordNote.delete({ where: { id: noteId } });
   }
+
+  async getStats(userId: string) {
+    const counts = await this.prisma.userWord.groupBy({
+      by: ['status'],
+      where: { userId },
+      _count: true,
+    });
+
+    const statusCounts = {
+      NEW: 0,
+      LEARNING: 0,
+      REVIEWING: 0,
+      MASTERED: 0,
+    };
+    counts.forEach((c) => {
+      statusCounts[c.status as keyof typeof statusCounts] = c._count;
+    });
+
+    // Calculate daily streak
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const quizzes = await this.prisma.quiz.findMany({
+      where: { 
+        userId, 
+        status: 'COMPLETED',
+        completedAt: { not: null }
+      },
+      select: { completedAt: true },
+      orderBy: { completedAt: 'desc' }
+    });
+
+    // Extract unique dates as YYYY-MM-DD strings
+    const uniqueDates = Array.from(new Set(
+      quizzes.map(q => q.completedAt!.toISOString().split('T')[0])
+    )).sort((a, b) => b.localeCompare(a)); // desc
+
+    let streak = 0;
+    const todayStr = today.toISOString().split('T')[0];
+    
+    // Check if streak includes today or yesterday
+    let currentDate = new Date(today);
+    let checkingStr = todayStr;
+
+    if (uniqueDates.includes(checkingStr)) {
+      streak++;
+    } else {
+      // If today is not there, check yesterday
+      currentDate.setDate(currentDate.getDate() - 1);
+      checkingStr = currentDate.toISOString().split('T')[0];
+      if (uniqueDates.includes(checkingStr)) {
+        streak++;
+      } else {
+        return { statusCounts, streak: 0 }; // Broken streak
+      }
+    }
+
+    // Continue backward
+    for (let i = 1; i < uniqueDates.length; i++) {
+      currentDate.setDate(currentDate.getDate() - 1);
+      const prevExpectedStr = currentDate.toISOString().split('T')[0];
+      if (uniqueDates.includes(prevExpectedStr)) {
+        streak++;
+      } else {
+        break;
+      }
+    }
+
+    return { statusCounts, streak };
+  }
 }

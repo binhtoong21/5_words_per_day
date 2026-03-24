@@ -35,7 +35,6 @@ export function Layout() {
         </div>
         <nav className="flex-1 px-4 py-2 space-y-1.5 overflow-y-auto">
           {links.map(l => {
-            const active = location.pathname.startsWith(l.path) && (l.path !== '/words' || location.pathname === '/words');
             // Quick fix for exact matching vs prefix matching
             const isActive = l.path === '/dashboard' ? location.pathname === '/dashboard' : location.pathname.startsWith(l.path);
             
