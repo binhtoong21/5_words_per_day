@@ -51,12 +51,24 @@ services:
     image: nginx:alpine
     ports:
       - '80:80'
+      - '443:443'
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./certbot/conf:/etc/letsencrypt:ro
+      - ./certbot/www:/var/www/certbot:ro
     depends_on:
       - api
       - web
     restart: always
+
+  certbot:
+    image: certbot/certbot
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    command: certonly --webroot -w /var/www/certbot --email admin@vocab.example.com -d vocab.example.com --rsa-key-size 4096 --agree-tos --force-renewal
+    depends_on:
+      - nginx
 
 volumes:
   postgres_data:

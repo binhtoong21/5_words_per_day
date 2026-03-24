@@ -8,6 +8,11 @@ import { UpdateNoteDto } from './dto/update-note.dto';
 export class UserWordsController {
   constructor(private readonly userWordsService: UserWordsService) {}
 
+  @Get('stats')
+  async getStats(@Request() req: any) {
+    return this.userWordsService.getStats(req.user?.id || 'mock-user-id');
+  }
+
   @Get()
   async findAll(@Request() req: any) {
     return this.userWordsService.findAll(req.user?.id || 'mock-user-id');
