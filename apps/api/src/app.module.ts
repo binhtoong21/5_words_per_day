@@ -1,4 +1,4 @@
-import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
@@ -14,14 +14,4 @@ import { ReadingModule } from './reading/reading.module';
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule implements NestModule {
-  configure(consumer: MiddlewareConsumer) {
-    consumer.apply((req: any, res: any, next: any) => {
-      const userId = req.headers['x-user-id'];
-      if (userId) {
-        req.user = { id: userId };
-      }
-      next();
-    }).forRoutes('*');
-  }
-}
+export class AppModule {}

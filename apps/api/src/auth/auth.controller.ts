@@ -20,14 +20,14 @@ export class AuthController {
 
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
-  async refresh() {
-    // Left empty for now. Requires refresh token handling
-    return this.authService.refresh();
+  async refresh(@Body('refreshToken') refreshToken: string) {
+    return this.authService.refresh(refreshToken);
   }
 
   @Post('logout')
   @HttpCode(HttpStatus.OK)
   async logout() {
+    // Client-side: clear stored tokens
     return { ok: true };
   }
 }

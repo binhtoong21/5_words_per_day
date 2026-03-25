@@ -35,12 +35,26 @@ export class ReadingService {
 
   async addToBank(userId: string, passageId: string, highlightId: string) {
     const hl = await this.prisma.passageHighlight.findFirst({ where: { id: highlightId, passage: { userId } }});
-    if (!hl) throw new NotFoundException();
+    if (!hl) throw new NotFoundException('Highlight not found');
+
+    // Look up the word in the system dictionary by highlighted text
+    const word = await this.prisma.word.findFirst({
+      where: { word: { equals: hl.wordText, mode: 'insensitive' } }
+    });
+    if (!word) {
+      throw new NotFoundException(`Word "${hl.wordText}" not found in system dictionary`);
+    }
+
+    // Check if user already has this word
+    const existing = await this.prisma.userWord.findUnique({
+      where: { userId_wordId: { userId, wordId: word.id } }
+    });
+    if (existing) return existing;
 
     return this.prisma.userWord.create({
       data: {
         userId,
-        wordId: 'system-dictionary-uuid',
+        wordId: word.id,
         status: 'NEW'
       }
     });

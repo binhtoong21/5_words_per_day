@@ -4,6 +4,16 @@ import { AiService } from '../ai/ai.service';
 import { CreateQuizDto } from './dto/create-quiz.dto';
 import { SubmitAnswerDto } from './dto/submit-answer.dto';
 
+/** Fisher-Yates (Knuth) shuffle — unbiased O(n) */
+function shuffleArray<T>(arr: T[]): T[] {
+  const result = [...arr];
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+}
+
 @Injectable()
 export class QuizService {
   constructor(private prisma: PrismaService, private aiService: AiService) {}
@@ -17,12 +27,12 @@ export class QuizService {
       wordsToTest = await this.selectDailyWords(userId);
     } else if (dto.type === 'QUICK') {
       const userWords = await this.prisma.userWord.findMany({ where: { userId }, include: { word: true } });
-      wordsToTest = userWords.sort(() => 0.5 - Math.random()).slice(0, 10).map((uw: any) => ({ ...uw.word, userWordId: uw.id }));
+      wordsToTest = shuffleArray(userWords).slice(0, 10).map((uw: any) => ({ ...uw.word, userWordId: uw.id }));
     } else if (dto.type === 'BAND_TEST') {
       const bands = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
       for (const band of bands) {
         const bandWords = await this.prisma.word.findMany({ where: { band }, take: 10 });
-        wordsToTest.push(...bandWords.sort(() => 0.5 - Math.random()).slice(0, 2).map((w: any) => ({ ...w, userWordId: null })));
+        wordsToTest.push(...shuffleArray(bandWords).slice(0, 2).map((w: any) => ({ ...w, userWordId: null })));
       }
     }
 
@@ -115,12 +125,13 @@ export class QuizService {
          if (item.isCorrect) bandStats[band].correct++;
       }
 
+      const bandPassRate = parseFloat(process.env.BAND_PASS_RATE || '0.6');
       const bandOrder = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
       let highestBand = 'A1';
       for (const band of bandOrder) {
         const stats = bandStats[band];
         if (stats && stats.total > 0) {
-          if (stats.correct / stats.total >= 0.6) {
+          if (stats.correct / stats.total >= bandPassRate) {
              highestBand = band;
           }
         }
@@ -202,34 +213,59 @@ export class QuizService {
       result.push(...filler.map((w: any) => ({ ...w, userWordId: null })));
     }
 
-    // Xáo trộn thứ tự cuối cùng
-    return result.sort(() => 0.5 - Math.random());
+    // Xáo trộn thứ tự cuối cùng (Fisher-Yates)
+    return shuffleArray(result);
+  }
+
+  /** Calculate days since last review */
+  private daysSince(date: Date | null): number {
+    if (!date) return Infinity;
+    return (Date.now() - date.getTime()) / (1000 * 60 * 60 * 24);
   }
 
   async updateLearningStatus(userWordId: string, isCorrect: boolean) {
     const userWord = await this.prisma.userWord.findUnique({ where: { id: userWordId } });
     if (!userWord) return;
 
+    const daysSinceReview = this.daysSince(userWord.lastReviewed);
+
     if (isCorrect) {
       const newStreak = userWord.streak + 1;
-      let newStatus = userWord.status as any;
+      let newStatus = userWord.status as string;
 
-      if (newStreak >= 3 && userWord.status === 'NEW') newStatus = 'LEARNING';
-      if (newStreak >= 5 && userWord.status === 'LEARNING') newStatus = 'REVIEWING';
-      if (newStreak >= 7 && userWord.status === 'REVIEWING') newStatus = 'MASTERED';
+      // Time-based SRS: require minimum intervals for promotion
+      if (newStreak >= 3 && userWord.status === 'NEW') {
+        newStatus = 'LEARNING';
+      }
+      if (newStreak >= 5 && userWord.status === 'LEARNING' && daysSinceReview >= 1) {
+        newStatus = 'REVIEWING';
+      }
+      if (newStreak >= 7 && userWord.status === 'REVIEWING' && daysSinceReview >= 3) {
+        newStatus = 'MASTERED';
+      }
 
       await this.prisma.userWord.update({
         where: { id: userWordId },
-        data: { correctCount: { increment: 1 }, streak: newStreak, status: newStatus, lastReviewed: new Date() }
+        data: { correctCount: { increment: 1 }, streak: newStreak, status: newStatus as any, lastReviewed: new Date() }
       });
     } else {
-      let newStatus = userWord.status as any;
-      if (userWord.status === 'MASTERED') newStatus = 'REVIEWING';
-      else if (userWord.status === 'REVIEWING') newStatus = 'LEARNING';
+      let newStatus = userWord.status as string;
+
+      // Forgiveness buffer: MASTERED words need 2 consecutive wrong answers
+      // We track this by checking if streak is already 0 (previous wrong answer)
+      if (userWord.status === 'MASTERED') {
+        if (userWord.streak === 0) {
+          // Second consecutive wrong answer → downgrade
+          newStatus = 'REVIEWING';
+        }
+        // First wrong answer → just reset streak, don't downgrade yet
+      } else if (userWord.status === 'REVIEWING') {
+        newStatus = 'LEARNING';
+      }
 
       await this.prisma.userWord.update({
         where: { id: userWordId },
-        data: { wrongCount: { increment: 1 }, streak: 0, status: newStatus, lastReviewed: new Date() }
+        data: { wrongCount: { increment: 1 }, streak: 0, status: newStatus as any, lastReviewed: new Date() }
       });
     }
   }

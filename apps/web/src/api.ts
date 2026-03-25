@@ -6,19 +6,42 @@ export const api = axios.create({
   withCredentials: true,
 });
 
+// Attach JWT access token to every request
 api.interceptors.request.use((config) => {
-  const user = useAuthStore.getState().user;
-  if (user && user.id) {
-    config.headers['x-user-id'] = user.id;
+  const accessToken = useAuthStore.getState().accessToken;
+  if (accessToken) {
+    config.headers['Authorization'] = `Bearer ${accessToken}`;
   }
   return config;
 });
 
+// Handle 401 responses: attempt token refresh, then retry once
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
-    if (error.response?.status === 401) {
-      // Handle unauthorized
+    const originalRequest = error.config;
+    
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
+      
+      const refreshToken = useAuthStore.getState().refreshToken;
+      if (refreshToken) {
+        try {
+          const res = await axios.post('/api/auth/refresh', { refreshToken });
+          const { accessToken: newAccess, refreshToken: newRefresh } = res.data;
+          
+          useAuthStore.getState().setTokens(newAccess, newRefresh);
+          originalRequest.headers['Authorization'] = `Bearer ${newAccess}`;
+          return api(originalRequest);
+        } catch {
+          // Refresh failed — force logout
+          useAuthStore.getState().logout();
+          window.location.href = '/login';
+        }
+      } else {
+        useAuthStore.getState().logout();
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(error);
   }
