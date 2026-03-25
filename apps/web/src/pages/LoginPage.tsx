@@ -8,7 +8,7 @@ export function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const setUser = useAuthStore((s: any) => s.setUser);
+  const login = useAuthStore((s) => s.login);
   const navigate = useNavigate();
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -16,7 +16,11 @@ export function LoginPage() {
     setLoading(true);
     try {
       const { data } = await api.post('/auth/login', { email, password });
-      setUser({ id: data.id, email: data.email, currentBand: 'A1' });
+      login(
+        { id: data.id, email: data.email, currentBand: data.currentBand || 'A1' },
+        data.accessToken,
+        data.refreshToken
+      );
       navigate('/dashboard');
     } catch (e) {
       alert('Login failed. Ensure backend is running.');

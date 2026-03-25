@@ -9,7 +9,7 @@ export function RegisterPage() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPlacementPrompt, setShowPlacementPrompt] = useState(false);
-  const setUser = useAuthStore((s: any) => s.setUser);
+  const login = useAuthStore((s) => s.login);
   const navigate = useNavigate();
 
   const handleTakeQuiz = async () => {
@@ -30,7 +30,11 @@ export function RegisterPage() {
     setLoading(true);
     try {
       const { data } = await api.post('/auth/register', { email, password });
-      setUser({ id: data.id, email: data.email, currentBand: 'A1' });
+      login(
+        { id: data.id, email: data.email, currentBand: 'A1' },
+        data.accessToken,
+        data.refreshToken
+      );
       setShowPlacementPrompt(true);
     } catch (e) {
       alert('Registration failed.');

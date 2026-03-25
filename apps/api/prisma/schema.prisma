@@ -30,6 +30,8 @@ model Word {
   updatedAt   DateTime     @updatedAt
 
   userWords   UserWord[]
+
+  @@index([band])
 }
 
 enum LearningStatus {
@@ -59,6 +61,8 @@ model UserWord {
   quizItems    QuizItem[]
 
   @@unique([userId, wordId])
+  @@index([userId, status])
+  @@index([userId, lastReviewed])
 }
 
 model WordNote {
@@ -94,6 +98,8 @@ model Quiz {
   createdAt   DateTime    @default(now())
   
   items       QuizItem[]
+
+  @@index([userId])
 }
 
 model QuizItem {
@@ -111,6 +117,8 @@ model QuizItem {
   correctAnswer String
   userAnswer    String?
   isCorrect     Boolean?
+
+  @@index([quizId])
 }
 
 model ReadingPassage {
@@ -124,6 +132,8 @@ model ReadingPassage {
   
   passageWords ReadingPassageWord[]
   highlights   PassageHighlight[]
+
+  @@index([userId])
 }
 
 model ReadingPassageWord {

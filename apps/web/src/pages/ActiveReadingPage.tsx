@@ -6,6 +6,27 @@ import { HighlightableText } from '../components/HighlightableText';
 import { AiAskPanel } from '../components/AiAskPanel';
 import { ArrowLeft, BookOpen, Check, X } from 'lucide-react';
 
+interface PassageHighlight {
+  id: string;
+  wordText: string;
+  createdAt: string;
+}
+
+interface PassageData {
+  id: string;
+  title: string;
+  content: string;
+  level?: string;
+  highlights: PassageHighlight[];
+  passageWords: Array<{ id: string; wordId: string }>;
+}
+
+interface TranslationResult {
+  id: string;
+  pos: string;
+  vietnamese: string;
+}
+
 export function ActiveReadingPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -14,12 +35,12 @@ export function ActiveReadingPage() {
   const [translatingWord, setTranslatingWord] = useState<string | null>(null);
   const [askingWord, setAskingWord] = useState<{word: string, context: string} | null>(null);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading } = useQuery<PassageData>({
     queryKey: ['reading', id],
     queryFn: async () => (await api.get(`/passages/${id}`)).data
   });
 
-  const { data: translationData, isLoading: translationLoading } = useQuery({
+  const { data: translationData, isLoading: translationLoading } = useQuery<TranslationResult[]>({
     queryKey: ['translation', translatingWord],
     queryFn: async () => (await api.get(`/words/search?q=${translatingWord}`)).data,
     enabled: !!translatingWord
@@ -81,7 +102,7 @@ export function ActiveReadingPage() {
           
           <div className="flex flex-wrap gap-3">
             {data.highlights?.length === 0 && <span className="text-slate-500 italic font-medium">No highlights yet. Select text above to save words.</span>}
-            {data.highlights?.map((h: any) => (
+            {data.highlights?.map((h) => (
               <div key={h.id} className="flex items-center gap-2 bg-slate-50 border border-slate-200 px-4 py-2 rounded-2xl group hover:shadow-md transition">
                 <span className="font-bold text-slate-700">{h.wordText}</span>
                 <button 
@@ -109,10 +130,13 @@ export function ActiveReadingPage() {
             <div className="p-6">
               <div className="text-xl font-bold text-indigo-700 mb-4">{translatingWord}</div>
               {translationLoading ? (
-                <div className="text-slate-500 animate-pulse">Loading translation...</div>
+                <div className="space-y-3">
+                  <div className="h-4 bg-slate-100 rounded-full animate-pulse w-3/4" />
+                  <div className="h-4 bg-slate-100 rounded-full animate-pulse w-1/2" />
+                </div>
               ) : translationData && translationData.length > 0 ? (
                 <div className="space-y-4">
-                  {translationData.slice(0, 3).map((w: any) => (
+                  {translationData.slice(0, 3).map((w) => (
                     <div key={w.id} className="text-slate-700">
                       <span className="font-serif italic text-slate-500 mr-2">{w.pos}</span>
                       {w.vietnamese}

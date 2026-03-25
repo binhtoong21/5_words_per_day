@@ -1,4 +1,4 @@
-import { Injectable, Inject, HttpException, HttpStatus } from '@nestjs/common';
+import { Injectable, Inject, HttpException, HttpStatus, Logger } from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
 import OpenAI from 'openai';
@@ -11,6 +11,7 @@ import { GeneratePassageDto } from './dto/generate-passage.dto';
 
 @Injectable()
 export class AiService {
+  private readonly logger = new Logger(AiService.name);
   private openai: OpenAI | null = null;
 
   constructor(
@@ -27,6 +28,35 @@ export class AiService {
       });
     }
     return null;
+  }
+
+  /**
+   * Sanitize user-provided strings before embedding in AI prompts.
+   * Prevents prompt injection by escaping delimiters and truncating.
+   */
+  private sanitizeInput(input: string, maxLength = 500): string {
+    return input
+      .replace(/[\r\n]+/g, ' ')    // collapse newlines
+      .replace(/["'`]/g, '')        // remove quote chars
+      .substring(0, maxLength)
+      .trim();
+  }
+
+  /**
+   * Centralized AI response parser. Handles markdown fences and validates JSON.
+   */
+  private parseAIResponse<T = Record<string, unknown>>(rawContent: string, context: string): T {
+    try {
+      let cleaned = rawContent.trim();
+      // Remove markdown code fences if present
+      if (cleaned.startsWith('```')) {
+        cleaned = cleaned.replace(/```json?\n?/g, '').replace(/```\s*$/g, '').trim();
+      }
+      return JSON.parse(cleaned) as T;
+    } catch {
+      this.logger.error(`Invalid AI JSON response [${context}]: ${rawContent.substring(0, 200)}`);
+      throw new HttpException('Invalid AI response format', HttpStatus.BAD_GATEWAY);
+    }
   }
 
   private async enforceRateLimit(userId: string, endpoint: string, limit: number) {
@@ -52,9 +82,13 @@ export class AiService {
     });
     if (!note) throw new HttpException('Note not found', HttpStatus.NOT_FOUND);
 
-    const prompt = `Evaluate the spelling, grammar, and contextual accuracy of the following custom note for the English word "${note.userWord.word.word}".
-Note Title: "${note.title}"
-Note Content: "${note.content}"
+    const safeWord = this.sanitizeInput(note.userWord.word.word, 100);
+    const safeTitle = this.sanitizeInput(note.title, 200);
+    const safeContent = this.sanitizeInput(note.content, 500);
+
+    const prompt = `Evaluate the spelling, grammar, and contextual accuracy of the following custom note for the English word "${safeWord}".
+Note Title: "${safeTitle}"
+Note Content: "${safeContent}"
 
 Output ONLY a JSON object exactly like this:
 { "ok": boolean, "feedback": "string explaining any errors or saying it is perfect" }`;
@@ -65,11 +99,11 @@ Output ONLY a JSON object exactly like this:
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.3
       });
-      let rawJson = response.choices[0].message.content || '{"ok":true,"feedback":"Error parsing."}';
-      rawJson = rawJson.replace(/```json/g, '').replace(/```/g, '').trim();
-      return JSON.parse(rawJson);
+      const rawContent = response.choices[0].message.content || '{"ok":true,"feedback":"Error parsing."}';
+      return this.parseAIResponse(rawContent, 'checkNote');
     } catch (e) {
-      console.error('AI checkNote Error:', e);
+      if (e instanceof HttpException) throw e;
+      this.logger.error('AI checkNote Error:', e);
       return { ok: true, feedback: 'Validation service temporarily unavailable.' };
     }
   }
@@ -90,7 +124,9 @@ Output ONLY a JSON object exactly like this:
     const word = await this.prisma.word.findUnique({ where: { id: dto.wordId } });
     if (!word) throw new HttpException('Word not found', HttpStatus.NOT_FOUND);
 
-    const prompt = `Generate 2 to 3 creative note suggestions for someone learning the English word "${word.word}".
+    const safeWord = this.sanitizeInput(word.word, 100);
+
+    const prompt = `Generate 2 to 3 creative note suggestions for someone learning the English word "${safeWord}".
 The word details are: ${JSON.stringify(word.definitions)}
 
 Ensure the suggestions show how to use the word in different contexts or mnemonics.
@@ -103,15 +139,15 @@ Output ONLY a JSON object exactly like this:
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.7
       });
-      let rawJson = response.choices[0].message.content || '{"suggestions":[]}';
-      rawJson = rawJson.replace(/```json/g, '').replace(/```/g, '').trim();
-      const result = JSON.parse(rawJson);
+      const rawContent = response.choices[0].message.content || '{"suggestions":[]}';
+      const result = this.parseAIResponse<{ suggestions: Array<{ title: string; content: string }> }>(rawContent, 'suggestNote');
       if (result && result.suggestions) {
         await this.cacheManager.set(cacheKey, result, 604800000);
       }
       return result;
     } catch (e) {
-      console.error('AI suggestNote Error:', e);
+      if (e instanceof HttpException) throw e;
+      this.logger.error('AI suggestNote Error:', e);
       throw new HttpException('AI Generation Failed', HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
@@ -125,10 +161,13 @@ Output ONLY a JSON object exactly like this:
     const word = await this.prisma.word.findUnique({ where: { id: dto.wordId } });
     if (!word) throw new HttpException('Word not found', HttpStatus.NOT_FOUND);
 
-    const prompt = `You are a helpful English tutor. The user is asking a question about the English word "${word.word}".
+    const safeWord = this.sanitizeInput(word.word, 100);
+    const safeQuestion = this.sanitizeInput(dto.question, 300);
+
+    const prompt = `You are a helpful English tutor. The user is asking a question about the English word "${safeWord}".
 The dictionary definition for context is: ${JSON.stringify(word.definitions)}
 
-User's Question: "${dto.question}"
+User's Question: "${safeQuestion}"
 
 Rules:
 1. Only answer questions related to the word, English grammar, or language learning.
@@ -142,17 +181,17 @@ Rules:
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.5
       });
-      let rawJson = response.choices[0].message.content || '{"answer":"Error generating response."}';
-      rawJson = rawJson.replace(/```json/g, '').replace(/```/g, '').trim();
-      return JSON.parse(rawJson);
+      const rawContent = response.choices[0].message.content || '{"answer":"Error generating response."}';
+      return this.parseAIResponse<{ answer: string }>(rawContent, 'ask');
     } catch (e) {
-      console.error('AI ask Error:', e);
+      if (e instanceof HttpException) throw e;
+      this.logger.error('AI ask Error:', e);
       throw new HttpException('AI Generation Failed', HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 
   async generateQuiz(userId: string, dto: GenerateQuizDto) {
-    await this.enforceRateLimit(userId, 'generateQuiz', 500);
+    await this.enforceRateLimit(userId, 'generateQuiz', 5);
     
     const client = this.getOpenAI();
     if (!client || !dto.words || dto.words.length === 0) {
@@ -184,12 +223,12 @@ Rules:
          response_format: { type: 'json_object' }
       });
 
-      let rawJson = response.choices[0].message.content || '{"questions":[]}';
-      rawJson = rawJson.replace(/```json/g, '').replace(/```/g, '').trim();
-      const result = JSON.parse(rawJson);
+      const rawContent = response.choices[0].message.content || '{"questions":[]}';
+      const result = this.parseAIResponse<{ questions: Array<Record<string, unknown>> }>(rawContent, 'generateQuiz');
       return result.questions || [];
     } catch (e) {
-      console.error('AI Error:', e);
+      if (e instanceof HttpException) throw e;
+      this.logger.error('AI generateQuiz Error:', e);
       throw new HttpException('AI Generation Failed', HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
@@ -216,15 +255,15 @@ Output ONLY a JSON object exactly like this:
          response_format: { type: 'json_object' }
       });
 
-      let rawJson = response.choices[0].message.content || '{"title":"Error", "content":"Generation failed."}';
-      rawJson = rawJson.replace(/```json/g, '').replace(/```/g, '').trim();
-      const parsed = JSON.parse(rawJson);
+      const rawContent = response.choices[0].message.content || '{"title":"Error", "content":"Generation failed."}';
+      const parsed = this.parseAIResponse<{ title: string; content: string }>(rawContent, 'generatePassage');
       
       return await this.prisma.readingPassage.create({
         data: { userId, title: parsed.title || 'Daily Reading Practice', content: parsed.content || 'Error' }
       });
     } catch (e) {
-      console.error('AI Passage Error:', e);
+      if (e instanceof HttpException) throw e;
+      this.logger.error('AI Passage Error:', e);
       throw new HttpException('Passage Generation Failed', HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
