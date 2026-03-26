@@ -243,7 +243,8 @@ Rules:
       });
     }
 
-    const prompt = `You are an expert English teacher. Write an engaging B1/B2 level short story about "${(dto as any).topic || 'a random interesting adventure'}". The story should be 3-4 paragraphs long. Use natural, authentic English. 
+    const safeTopic = this.sanitizeInput((dto as any).topic || 'a random interesting adventure', 100);
+    const prompt = `You are an expert English teacher. Write an engaging B1/B2 level short story about "${safeTopic}". The story should be 3-4 paragraphs long. Use natural, authentic English. 
 Output ONLY a JSON object exactly like this:
 { "title": "A catchy title for the story", "content": "The 3-4 paragraph story text" }`;
 

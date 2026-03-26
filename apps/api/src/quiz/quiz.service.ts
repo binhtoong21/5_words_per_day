@@ -165,31 +165,32 @@ export class QuizService {
     const masteredQuota = Math.round(total * 0.2);
     const newQuota      = total - learningQuota - masteredQuota;
 
-    // Pool 1: Từ đang học (LEARNING / REVIEWING), ưu tiên lâu chưa ôn
-    const learningWords = await this.prisma.userWord.findMany({
-      where: { userId, status: { in: ['LEARNING', 'REVIEWING'] } },
-      include: { word: true },
-      orderBy: { lastReviewed: 'asc' },
-      take: learningQuota,
-    });
-
     // Pool 2: Từ MASTERED nhưng chưa ôn > 7 ngày
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-    const masteredWords = await this.prisma.userWord.findMany({
-      where: { userId, status: 'MASTERED', lastReviewed: { lt: sevenDaysAgo } },
-      include: { word: true },
-      orderBy: { lastReviewed: 'asc' },
-      take: masteredQuota,
-    });
 
-    // Pool 3: Từ mới từ hệ thống, loại trừ từ đã có trong kho user
-    const existingWordIds = (
-      await this.prisma.userWord.findMany({
+    // Chạy đồng thời 3 câu truy vấn đầu bằng Promise.all thay vì tuần tự (khắc phục waterfall queries)
+    const [learningWords, masteredWords, existingWordRecords] = await Promise.all([
+      this.prisma.userWord.findMany({
+        where: { userId, status: { in: ['LEARNING', 'REVIEWING'] } },
+        include: { word: true },
+        orderBy: { lastReviewed: 'asc' },
+        take: learningQuota,
+      }),
+      this.prisma.userWord.findMany({
+        where: { userId, status: 'MASTERED', lastReviewed: { lt: sevenDaysAgo } },
+        include: { word: true },
+        orderBy: { lastReviewed: 'asc' },
+        take: masteredQuota,
+      }),
+      this.prisma.userWord.findMany({
         where: { userId },
         select: { wordId: true },
       })
-    ).map((uw: { wordId: string }) => uw.wordId);
+    ]);
+
+    // Pool 3: Từ mới từ hệ thống, loại trừ từ đã có trong kho user
+    const existingWordIds = existingWordRecords.map((uw: { wordId: string }) => uw.wordId);
 
     const newSystemWords = await this.prisma.word.findMany({
       where: { band: currentBand, id: { notIn: existingWordIds } },
