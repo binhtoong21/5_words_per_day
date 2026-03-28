@@ -8,16 +8,21 @@ generator client {
 }
 
 model User {
-  id           String        @id @default(uuid())
-  email        String        @unique
-  passwordHash String
-  currentBand  String        @default("A1")
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  id                   String        @id @default(uuid())
+  email                String        @unique
+  passwordHash         String
+  currentBand          String        @default("A1")
+  
+  isPremium            Boolean       @default(false)
+  stripeCustomerId     String?       @unique
+  stripeSubscriptionId String?       @unique
 
-  userWords    UserWord[]
-  quizzes      Quiz[]
-  passages     ReadingPassage[]
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+
+  userWords            UserWord[]
+  quizzes              Quiz[]
+  passages             ReadingPassage[]
 }
 
 model Word {
