@@ -60,11 +60,17 @@ export class AiService {
   }
 
   private async enforceRateLimit(userId: string, endpoint: string, limit: number) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new HttpException('User not found', HttpStatus.NOT_FOUND);
+
+    // Give premium users 10x the limit
+    const ultimateLimit = user.isPremium ? Math.ceil(limit * 10) : limit;
+
     const key = `ai_limit:${userId}:${endpoint}`;
     let count = (await this.cacheManager.get<number>(key)) || 0;
     
-    if (count >= limit) {
-      throw new HttpException('Too Many Requests', HttpStatus.TOO_MANY_REQUESTS);
+    if (count >= ultimateLimit) {
+      throw new HttpException('Too Many Requests. Upgrade to Premium for higher limits.', HttpStatus.TOO_MANY_REQUESTS);
     }
     
     await this.cacheManager.set(key, count + 1, 86400000); // 24h caching

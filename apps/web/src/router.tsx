@@ -14,6 +14,7 @@ import { QuizResultPage } from './pages/QuizResultPage';
 import { ReadingSetupPage } from './pages/ReadingSetupPage';
 import { ActiveReadingPage } from './pages/ActiveReadingPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { PricingPage } from './pages/PricingPage';
 
 export const router = createBrowserRouter([
   { path: '/', element: <LandingPage /> },
@@ -34,6 +35,7 @@ export const router = createBrowserRouter([
       { path: 'reading', element: <ReadingSetupPage /> },
       { path: 'reading/:id', element: <ActiveReadingPage /> },
       { path: 'settings', element: <SettingsPage /> },
+      { path: 'pricing', element: <PricingPage /> },
     ]
   }
 ]);
