@@ -2,6 +2,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
 import { ProgressBadge } from '../components/ProgressBadge';
+import { PlayAudioButton } from '../components/PlayAudioButton';
 import { NoteEditor } from '../components/NoteEditor';
 import { AiAskPanel } from '../components/AiAskPanel';
 import { ArrowLeft } from 'lucide-react';
@@ -49,7 +50,10 @@ export function UserWordDetailPage() {
         <div className="lg:col-span-8 flex flex-col gap-8">
           <div className="bg-white p-8 md:p-10 rounded-3xl border border-slate-200 shadow-xl shadow-slate-200/50">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-8 border-b border-slate-100">
-              <h1 className="text-5xl md:text-6xl font-extrabold text-slate-900 tracking-tight">{w.word}</h1>
+              <div className="flex items-center gap-4">
+                <h1 className="text-5xl md:text-6xl font-extrabold text-slate-900 tracking-tight">{w.word}</h1>
+                <PlayAudioButton word={w.word} size="lg" />
+              </div>
               <div className="flex gap-3 items-center">
                  <span className="px-4 py-1.5 bg-slate-100 text-slate-700 font-bold rounded-xl text-sm border border-slate-200">{w.band}</span>
                  <ProgressBadge status={data.status} className="text-sm px-3 py-1.5" />
