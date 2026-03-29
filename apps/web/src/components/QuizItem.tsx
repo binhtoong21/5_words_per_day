@@ -1,15 +1,18 @@
 import { useState } from 'react';
 import { cn } from '../lib/utils';
+import { PlayAudioButton } from './PlayAudioButton';
 import { CheckCircle2, XCircle } from 'lucide-react';
 
 interface QuizItemProps {
   id: string;
   question: string;
   options?: string[];
+  /** The word this question is about — used for TTS pronunciation */
+  wordText?: string;
   onSubmit: (answer: string) => Promise<{ isCorrect: boolean, correctAnswer: string }>;
 }
 
-export function QuizItem({ question, options, onSubmit }: QuizItemProps) {
+export function QuizItem({ question, options, wordText, onSubmit }: QuizItemProps) {
   const [selected, setSelected] = useState('');
   const [result, setResult] = useState<{ isCorrect: boolean, correctAnswer: string } | null>(null);
   const [loading, setLoading] = useState(false);
@@ -28,9 +31,12 @@ export function QuizItem({ question, options, onSubmit }: QuizItemProps) {
 
   return (
     <div className="flex flex-col gap-6 p-6 md:p-8 rounded-3xl border border-slate-200 bg-white shadow-lg w-full max-w-2xl mx-auto">
-      <h3 className="text-xl md:text-2xl font-bold text-slate-800 leading-relaxed text-center">
-        {question}
-      </h3>
+      <div className="flex items-center justify-center gap-3">
+        {wordText && <PlayAudioButton word={wordText} size="md" />}
+        <h3 className="text-xl md:text-2xl font-bold text-slate-800 leading-relaxed text-center">
+          {question}
+        </h3>
+      </div>
       
       <div className="flex flex-col gap-3 mt-4">
         {options?.map(opt => {

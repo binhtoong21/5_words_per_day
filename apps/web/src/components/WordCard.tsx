@@ -1,4 +1,5 @@
 import { ProgressBadge } from './ProgressBadge';
+import { PlayAudioButton } from './PlayAudioButton';
 import { cn } from '../lib/utils';
 import { Link } from 'react-router-dom';
 
@@ -21,11 +22,14 @@ export function WordCard({ id, word, band, status, linkTo }: WordCardProps) {
         "hover:border-blue-300 hover:shadow-lg transition-all duration-300 hover:-translate-y-1"
       )}
     >
-      <div className="flex flex-col gap-2 items-start">
-        <span className="text-xl font-bold text-slate-800 group-hover:text-blue-600 transition-colors">
-          {word}
-        </span>
-        {status && <ProgressBadge status={status} />}
+      <div className="flex items-center gap-3">
+        <PlayAudioButton word={word} size="sm" />
+        <div className="flex flex-col gap-1.5 items-start">
+          <span className="text-xl font-bold text-slate-800 group-hover:text-blue-600 transition-colors">
+            {word}
+          </span>
+          {status && <ProgressBadge status={status} />}
+        </div>
       </div>
       <div className="flex bg-slate-100 border border-slate-200 px-3 py-1 rounded-xl text-sm font-bold text-slate-600 shadow-sm">
         {band}

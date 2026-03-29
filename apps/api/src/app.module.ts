@@ -9,9 +9,10 @@ import { AiModule } from './ai/ai.module';
 import { QuizModule } from './quiz/quiz.module';
 import { ReadingModule } from './reading/reading.module';
 import { PaymentModule } from './payment/payment.module';
+import { NotificationModule } from './notification/notification.module';
 
 @Module({
-  imports: [PrismaModule, AuthModule, WordsModule, UserWordsModule, AiModule, QuizModule, ReadingModule, PaymentModule],
+  imports: [PrismaModule, AuthModule, WordsModule, UserWordsModule, AiModule, QuizModule, ReadingModule, PaymentModule, NotificationModule],
   controllers: [AppController],
   providers: [AppService],
 })

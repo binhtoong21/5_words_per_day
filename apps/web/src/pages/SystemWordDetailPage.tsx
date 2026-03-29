@@ -1,6 +1,7 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
+import { PlayAudioButton } from '../components/PlayAudioButton';
 import { ArrowLeft, Plus } from 'lucide-react';
 
 export function SystemWordDetailPage() {
@@ -33,7 +34,11 @@ export function SystemWordDetailPage() {
       <div className="bg-white p-8 md:p-12 rounded-3xl border border-slate-200 shadow-xl shadow-slate-200/50">
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-8 border-b border-slate-100">
           <div>
-            <h1 className="text-5xl md:text-6xl font-extrabold text-slate-900 tracking-tight">{data.word}</h1>
+            <div className="flex items-center gap-4">
+              <h1 className="text-5xl md:text-6xl font-extrabold text-slate-900 tracking-tight">{data.word}</h1>
+              <PlayAudioButton word={data.word} size="lg" />
+            </div>
+            {data.phonetic && <p className="mt-2 text-lg text-slate-500 font-medium italic">{data.phonetic}</p>}
             <div className="mt-4 flex gap-3">
                <span className="px-4 py-1.5 bg-blue-100 text-blue-700 font-bold rounded-xl text-sm border border-blue-200">{data.band}</span>
             </div>

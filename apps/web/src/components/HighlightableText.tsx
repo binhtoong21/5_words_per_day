@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Languages, MessageSquare, Plus } from 'lucide-react';
+import { Languages, MessageSquare, Plus, Volume2 } from 'lucide-react';
 import { clsx } from 'clsx';
 
 interface HighlightableTextProps {
@@ -55,6 +55,21 @@ export function HighlightableText({ text, onTranslate, onAskAi, onAddWord, onHig
               <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 flex items-center gap-1 bg-slate-900 p-1.5 rounded-xl shadow-xl border border-slate-700 animate-in fade-in zoom-in-95 duration-200">
                 <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-slate-900 rotate-45 border-r border-b border-slate-700"></div>
                 
+                <button 
+                  onClick={(e) => { 
+                    e.stopPropagation(); 
+                    const u = new SpeechSynthesisUtterance(token);
+                    u.lang = 'en-US'; u.rate = 0.9;
+                    window.speechSynthesis.cancel();
+                    window.speechSynthesis.speak(u);
+                  }}
+                  className="flex flex-col items-center justify-center w-12 h-10 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-white transition"
+                  title="Phát âm"
+                >
+                  <Volume2 className="w-4 h-4 mb-1" />
+                  <span className="text-[10px] font-bold">Listen</span>
+                </button>
+
                 {onTranslate && (
                   <button 
                     onClick={(e) => { e.stopPropagation(); onTranslate(token); setActiveTokenIndex(null); }}
